@@ -33,6 +33,11 @@ Raw ACPI dumps are intentionally ignored because they are machine-specific and m
 
 Both fixes include rollback scripts. Use the one-time ACPI initrd test before making the DSDT override permanent, and do not enable fingerprint PAM login until `fprintd-verify` works after a `fprintd` restart.
 
+The fingerprint reader stores enrolled prints in the device itself. Windows Hello
+and Linux may overwrite or invalidate each other's enrollments, so dual-boot
+fingerprint use is not reliable on the tested machine. Keep password login
+available.
+
 ## Quick Links
 
 Start with the subsystem README:

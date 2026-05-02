@@ -6,6 +6,21 @@ Fix for the Egis/LighTuning fingerprint reader used by the tested Samsung 960XGL
 Bus ... Device ...: ID 1c7a:05a1 LighTuning Technology Inc. ETU905A80-E
 ```
 
+## Warning: Dual-Boot Fingerprint Storage
+
+This fingerprint reader stores enrolled prints in the device itself. Windows Hello
+and Linux `fprintd`/`libfprint` use the same device-side storage, not two fully
+independent per-OS databases.
+
+If you enroll or reset fingerprints in Windows, the Linux enrollments may be
+deleted or made unusable. If you enroll or reset fingerprints in Linux, Windows
+Hello may also need to be set up again. On the tested machine, dual-boot
+coexistence is not reliable.
+
+Before enabling fingerprint login or sudo on Linux, make sure you are willing to
+re-enroll fingerprints after switching back to Windows Hello. Keep password login
+available at all times.
+
 ## Problem
 
 Ubuntu detects the device through `fprintd`, but the stock driver behaves incorrectly:
