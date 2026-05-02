@@ -42,7 +42,7 @@ if [[ ! -d "$repo_dir/.git" ]]; then
   git clone "$repo_url" "$repo_dir"
 fi
 
-dirty_status="$(git -C "$repo_dir" status --porcelain)"
+dirty_status="$(git -C "$repo_dir" status --porcelain -- . ":(exclude)builddir")"
 if [[ -n "$dirty_status" ]]; then
   if [[ "$dirty_status" != " M meson.build" ]] ||
     ! grep -q "'egismoc' : \\[ 'openssl' \\]" "$repo_dir/meson.build"; then
@@ -59,30 +59,30 @@ if ! grep -q "'egismoc' : \\[ 'openssl' \\]" "$repo_dir/meson.build"; then
   git -C "$repo_dir" apply "$patch_file"
 fi
 
+# A manual clock change can leave cloned files dated in the future, and Meson
+# aborts with "Clock skew detected". Normalize mtimes inside this build clone.
+find "$repo_dir" -exec touch -h -c {} +
+
 if ! lsusb | grep -qi '1c7a:05a1'; then
   echo "Warning: USB device 1c7a:05a1 was not found in lsusb output." >&2
 fi
 
-if [[ -d "$build_dir" ]]; then
-  meson setup "$build_dir" --wipe \
-    --prefix=/usr/local \
-    --libdir="lib/$multiarch" \
-    -Ddrivers=egismoc \
-    -Dintrospection=false \
-    -Ddoc=false \
-    -Dinstalled-tests=false \
-    -Dudev_rules=disabled \
-    -Dudev_hwdb=disabled
+meson_setup_args=(
+  --prefix=/usr/local
+  --libdir="lib/$multiarch"
+  -Ddrivers=egismoc
+  -Dintrospection=false
+  -Ddoc=false
+  -Dinstalled-tests=false
+  -Dudev_rules=disabled
+  -Dudev_hwdb=disabled
+)
+
+if [[ -f "$build_dir/meson-private/coredata.dat" ]]; then
+  meson setup "$build_dir" "$repo_dir" --wipe "${meson_setup_args[@]}"
 else
-  meson setup "$build_dir" \
-    --prefix=/usr/local \
-    --libdir="lib/$multiarch" \
-    -Ddrivers=egismoc \
-    -Dintrospection=false \
-    -Ddoc=false \
-    -Dinstalled-tests=false \
-    -Dudev_rules=disabled \
-    -Dudev_hwdb=disabled
+  rm -rf "$build_dir"
+  meson setup "$build_dir" "$repo_dir" "${meson_setup_args[@]}"
 fi
 
 meson compile -C "$build_dir"
