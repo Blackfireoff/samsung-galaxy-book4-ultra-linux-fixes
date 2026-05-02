@@ -26,6 +26,21 @@ Core BAT1 change:
                  {
                      Local0 = 0x0F
 
+FAN0 fan-status compatibility change:
+
+The tested firmware exposes `FAN0` as `PNP0C0B`, but Linux logs repeated
+`AE_AML_OPERAND_TYPE` failures when evaluating `_FST`. The failing operation is
+the `Add` after reading a package element from `FANT`. ACPICA needs the package
+element dereferenced before arithmetic.
+
+--- a/dsdt.dsl
++++ b/dsdt-patched.dsl
+@@
+-                    Local1 = FANT [Local0]
++                    /* PATCH: ACPICA needs the package element dereferenced before Add */
++                    Local1 = DerefOf (FANT [Local0])
+                     Local1 += 0x0A
+
 Compile fixes applied by the script:
 
 --- a/dsdt.dsl

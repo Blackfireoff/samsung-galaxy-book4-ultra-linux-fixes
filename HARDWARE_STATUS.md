@@ -29,6 +29,7 @@ Kernel: 7.0.0-15-generic
 | Fingerprint storage | Same Egis/LighTuning Match-on-Chip reader | Known limitation | No safe repo patch available |
 | GNOME keyring after fingerprint login | GNOME keyring / PAM behavior | Expected behavior | No repo patch needed |
 | GStreamer camera plugin cache | Per-user GStreamer registry cache | Known failure mode, workaround documented | Covered by camera notes |
+| Fan / thermal policy | ACPI fan, Intel thermal zones, `platform_profile` | Patch added, needs reboot test | `acpi/` DSDT `FAN0._FST` fix |
 
 ## Patched And Tested
 
@@ -160,6 +161,63 @@ Reason: service activation is normal
 
 ## Known Limitations
 
+### Fan / Thermal Policy
+
+Linux exposes the expected thermal stack on the tested machine:
+
+```text
+platform_profile choices: quiet balanced performance
+current platform_profile: balanced
+powerprofilesctl: uses intel_pstate + platform_profile
+thermald.service: active, started with --adaptive
+CPU driver: intel_pstate active
+CPU governor: powersave on all CPUs
+```
+
+Thermal zones and cooling devices are present:
+
+```text
+thermal_zone: acpitz, SNS1/SNS2/SNS3, INT3400 Thermal, TCPU, TCPU_PCI, iwlwifi, x86_pkg_temp
+cooling_device: Processor, intel_powerclamp, PCIe link-speed devices, Fan
+ACPI fan: PNP0C0B at \_SB_.PC00.LPCB.FAN0
+```
+
+What worked during verification:
+
+```text
+powerprofilesctl reports balanced/performance/power-saver profiles
+platform_profile reports quiet/balanced/performance choices
+idle thermal check showed no new package throttling over 10 seconds
+```
+
+Known issue found:
+
+```text
+ACPI Error: Aborting method \_SB.PC00.LPCB.FAN0._FST due to previous error (AE_AML_OPERAND_TYPE)
+acpi-fan PNP0C0B:00: Error retrieving current fan status: -5
+```
+
+The DSDT contains a `FAN0._FST` method that reads `H_EC.FANS`, indexes `FANT`,
+and then does arithmetic on the returned value. The kernel reports the failure
+while resolving the `Add` operation in `_FST`. As a result, Linux exposes the
+fan cooling device, but fan status/RPM telemetry is unreliable:
+
+```text
+/sys/bus/acpi/devices/PNP0C0B:00/fan_speed_rpm is empty
+/sys/class/hwmon/.../fan1_input reports 0
+```
+
+This does not prove that the physical fan is broken. It means Linux cannot
+reliably read the ACPI fan status through `_FST` on the tested firmware. The
+actual fan may still be controlled by firmware/EC thermal policy.
+
+Repo status:
+
+```text
+Patch available: yes, added to the ACPI DSDT patch script
+Test requirement: rebuild AML, boot through one-time initrd first, then check kernel logs
+```
+
 ### Windows Hello And Linux Fingerprint Enrollments
 
 The tested fingerprint reader is Match-on-Chip. Enrolled prints are stored in
@@ -211,7 +269,6 @@ Thunderbolt / USB4 hotplug
 Suspend / resume battery drain
 Keyboard backlight / hotkeys
 Touchpad gestures
-Fan / thermal policy
 SD card reader, if present
 ```
 
@@ -254,6 +311,33 @@ lsusb | grep -iE '1c7a|egis|lightuning'
 ldd /usr/libexec/fprintd | grep fprint
 fprintd-list "$USER"
 journalctl -u fprintd -n 200 --no-pager
+```
+
+For fan or thermal policy issues:
+
+```sh
+cat /sys/firmware/acpi/platform_profile 2>/dev/null
+cat /sys/firmware/acpi/platform_profile_choices 2>/dev/null
+powerprofilesctl list
+systemctl status thermald power-profiles-daemon --no-pager
+
+for z in /sys/class/thermal/thermal_zone*; do
+  [ -d "$z" ] || continue
+  echo "$z type=$(cat "$z/type" 2>/dev/null) temp=$(cat "$z/temp" 2>/dev/null)"
+done
+
+for c in /sys/class/thermal/cooling_device*; do
+  [ -d "$c" ] || continue
+  echo "$c type=$(cat "$c/type" 2>/dev/null) cur=$(cat "$c/cur_state" 2>/dev/null) max=$(cat "$c/max_state" 2>/dev/null)"
+done
+
+for h in /sys/class/hwmon/hwmon*; do
+  [ -d "$h" ] || continue
+  echo "$h name=$(cat "$h/name" 2>/dev/null)"
+  grep -H . "$h"/fan*_input "$h"/temp*_input 2>/dev/null
+done
+
+journalctl -k -b --no-pager | grep -iE 'thermal|thermald|int340|dptf|fan|cooling|throttl|temperature'
 ```
 
 Do not upload raw ACPI dumps, full DSDT files, serial numbers, Windows product

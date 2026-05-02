@@ -1,6 +1,9 @@
-# ACPI BAT1 DSDT Override
+# ACPI BAT1 / FAN0 DSDT Override
 
 Fix for a Samsung Galaxy Book / 960XGL where Linux only detects the internal battery if the laptop boots with the AC adapter plugged in.
+
+The same DSDT patch script also applies a small `FAN0._FST` compatibility fix
+for Linux fan-status telemetry.
 
 ## Problem
 
@@ -41,6 +44,22 @@ If ((LINX != One))
 ```
 
 Returning `Zero` from `_STA` tells ACPI that the device is absent/disabled. The patch removes only this battery-hiding branch.
+
+The tested firmware also exposes `FAN0` as `PNP0C0B`, but Linux logs:
+
+```text
+ACPI Error: Aborting method \_SB.PC00.LPCB.FAN0._FST due to previous error (AE_AML_OPERAND_TYPE)
+acpi-fan PNP0C0B:00: Error retrieving current fan status: -5
+```
+
+In `FAN0._FST`, the firmware reads a package element from `FANT` and then adds
+`0x0A` to it. ACPICA needs that package element explicitly dereferenced before
+the arithmetic operation:
+
+```asl
+Local1 = DerefOf (FANT [Local0])
+Local1 += 0x0A
+```
 
 The patch script also applies compile fixes needed by current `iasl` on this DSDT:
 
@@ -83,6 +102,12 @@ AML Output: dsdt-patched.aml
 
 Warnings and remarks from the vendor DSDT are expected; `0 Errors` is the important condition.
 
+Confirm that the patched DSL contains the FAN0 fix:
+
+```sh
+grep -n 'DerefOf (FANT \[Local0\])' dsdt-patched.dsl
+```
+
 ## One-Time Initrd Test
 
 Use this before making the override permanent.
@@ -100,6 +125,14 @@ This creates a separate initrd:
 
 It does not modify the normal initrd and does not modify GRUB.
 
+If you want to keep an older BAT1-only test initrd, provide a separate output
+path:
+
+```sh
+sudo env TEST_INITRD="/boot/initrd.img-$(uname -r)-dsdt-bat1-fan0-test" \
+  /path/to/repo/acpi/scripts/install-dsdt-test-initrd-v2.sh
+```
+
 Reboot, edit the GRUB entry once, and replace the normal initrd path with the test initrd. Boot without the charger connected, then verify:
 
 ```sh
@@ -116,6 +149,16 @@ ACPI: battery: Slot [BAT1] (battery present)
 $ ls /sys/class/power_supply
 BAT1  ucsi-source-psy-USBC000:001  ucsi-source-psy-USBC000:002
 ```
+
+The fan-status fix should also stop new `_FST` `AE_AML_OPERAND_TYPE` errors
+after boot:
+
+```sh
+journalctl -k -b --no-pager | grep -iE 'FAN0|_FST|acpi-fan|AE_AML_OPERAND_TYPE'
+```
+
+No repeated `_FST` `AE_AML_OPERAND_TYPE` errors is the expected result. Fan RPM
+may still depend on firmware/EC behavior and may be `0` when the fan is stopped.
 
 ## Permanent Install
 

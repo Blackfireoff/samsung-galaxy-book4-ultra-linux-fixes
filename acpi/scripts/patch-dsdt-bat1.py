@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Patch a Samsung 960XGL DSDT so BAT1 is not hidden on battery boot.
+"""Patch a Samsung 960XGL DSDT for BAT1 and FAN0 Linux compatibility.
 
 This script intentionally patches a locally dumped/decompiled DSDT. Do not use
 someone else's compiled AML on a different BIOS revision.
@@ -57,6 +57,15 @@ XHCI_PS3_BODY = """                    ADBG ("XHCI D3")
                     {
                         PS3X ()
                     }
+"""
+
+FAN0_FST_BROKEN_READ = """                    Local1 = FANT [Local0]
+                    Local1 += 0x0A
+"""
+
+FAN0_FST_FIXED_READ = """                    /* PATCH: ACPICA needs the package element dereferenced before Add */
+                    Local1 = DerefOf (FANT [Local0])
+                    Local1 += 0x0A
 """
 
 
@@ -144,6 +153,8 @@ def main() -> None:
         1,
         "PC02 XHCI _PS3",
     )
+
+    text = replace_once(text, FAN0_FST_BROKEN_READ, FAN0_FST_FIXED_READ, "FAN0._FST package dereference")
 
     target.write_text(text, encoding="utf-8")
     print(f"Wrote patched DSDT: {target}")
