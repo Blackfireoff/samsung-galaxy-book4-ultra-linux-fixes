@@ -20,6 +20,9 @@ camera/       OV02C10/IPU6 webcam notes, upstream install, and color tuning
 fingerprint/  Egis/LighTuning 1c7a:05a1 fingerprint fix using libfprint SDCP
 ```
 
+See `HARDWARE_STATUS.md` for the tested hardware matrix, known limitations,
+and the diagnostics to include when opening a new issue.
+
 ## Status
 
 The ACPI BAT1 override was tested successfully: Linux loads the DSDT table from initrd, reports `ACPI: Table Upgrade`, and creates `/sys/class/power_supply/BAT1` when booting without the charger.
@@ -50,6 +53,7 @@ available.
 Start with the subsystem README:
 
 ```text
+HARDWARE_STATUS.md
 acpi/README.md
 camera/README.md
 fingerprint/README.md
