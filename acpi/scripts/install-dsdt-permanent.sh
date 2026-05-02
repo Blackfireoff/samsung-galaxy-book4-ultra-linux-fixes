@@ -3,7 +3,8 @@ set -eu
 
 KVER="${1:-$(uname -r)}"
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-PATCHED_AML="${SCRIPT_DIR}/dsdt-patched.aml"
+WORK_DIR="${ACPI_WORKDIR:-$(pwd)}"
+PATCHED_AML="${DSDT_AML:-${WORK_DIR}/dsdt-patched.aml}"
 TABLE_DIR="/etc/acpi/samsung-bat1-dsdt"
 TABLE_FILE="${TABLE_DIR}/DSDT.aml"
 DRACUT_CONF="/etc/dracut.conf.d/99-samsung-bat1-dsdt.conf"
@@ -42,7 +43,7 @@ install -m 0644 "$PATCHED_AML" "$TABLE_FILE"
 
 cat > "$DRACUT_CONF" <<EOF
 # Samsung Galaxy Book 960XGL BAT1 DSDT override.
-# Created from ${SCRIPT_DIR}/dsdt-patched.aml
+# Created from ${PATCHED_AML}
 # Remove this file and regenerate initramfs to disable the override.
 acpi_override="yes"
 acpi_table_dir="${TABLE_DIR}"

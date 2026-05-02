@@ -14,16 +14,24 @@
 
 # Intermediate decompilations and backups.
 dsdt.dsl
+dsdt-patched.dsl
 ssdt*.dsl
 dsdt-patched-before-*.dsl
 bat1-block.txt
 acpi-override/
 install-dsdt-test-initrd.sh
 
+# Local fingerprint/libfprint build trees.
+fingerprint/build/
+libfprint-egismoc-sdcp/
+libfprint-src/
+
 # Local editor/OS files.
 *~
 *.swp
 .DS_Store
+__pycache__/
+*.pyc
 
 # Local Codex workspace metadata.
 .agents/

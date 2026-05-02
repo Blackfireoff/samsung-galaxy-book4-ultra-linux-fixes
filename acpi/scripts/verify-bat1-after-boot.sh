@@ -2,11 +2,12 @@
 set -eu
 
 uname -r
+PATCHED_AML="${DSDT_AML:-$(pwd)/dsdt-patched.aml}"
 if command -v sudo >/dev/null 2>&1; then
-    sudo sha256sum /sys/firmware/acpi/tables/DSDT dsdt-patched.aml || true
+    sudo sha256sum /sys/firmware/acpi/tables/DSDT "$PATCHED_AML" || true
     sudo dmesg | grep -iE "ACPI:.*override|table upgrade|DSDT|battery|BAT1|PNP0C0A" || true
 else
-    sha256sum /sys/firmware/acpi/tables/DSDT dsdt-patched.aml || true
+    sha256sum /sys/firmware/acpi/tables/DSDT "$PATCHED_AML" || true
     dmesg | grep -iE "ACPI:.*override|table upgrade|DSDT|battery|BAT1|PNP0C0A" || true
 fi
 ls /sys/class/power_supply

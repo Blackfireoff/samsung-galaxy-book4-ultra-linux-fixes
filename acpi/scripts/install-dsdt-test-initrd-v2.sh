@@ -3,12 +3,13 @@ set -eu
 
 KVER="${1:-$(uname -r)}"
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+WORK_DIR="${ACPI_WORKDIR:-$(pwd)}"
 BASE_INITRD="/boot/initrd.img-${KVER}"
 TEST_INITRD="/boot/initrd.img-${KVER}-dsdt-bat1-v2"
 BACKUP_INITRD="/boot/initrd.img-${KVER}.pre-dsdt-bat1-backup"
-OVERRIDE_CPIO="${SCRIPT_DIR}/acpi_override.cpio"
-PATCHED_AML="${SCRIPT_DIR}/dsdt-patched.aml"
-OVERRIDE_DIR="${SCRIPT_DIR}/acpi-override"
+OVERRIDE_CPIO="${WORK_DIR}/acpi_override.cpio"
+PATCHED_AML="${DSDT_AML:-${WORK_DIR}/dsdt-patched.aml}"
+OVERRIDE_DIR="${WORK_DIR}/acpi-override"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "Run with sudo: sudo $0 ${KVER}" >&2
@@ -23,6 +24,7 @@ fi
 if [ ! -r "$PATCHED_AML" ]; then
     echo "Missing compiled DSDT AML: $PATCHED_AML" >&2
     echo "Build it first with: iasl -tc dsdt-patched.dsl" >&2
+    echo "Or set DSDT_AML=/path/to/dsdt-patched.aml" >&2
     exit 1
 fi
 
