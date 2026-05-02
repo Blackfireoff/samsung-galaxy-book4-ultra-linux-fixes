@@ -16,6 +16,7 @@ This repository is intentionally split by subsystem:
 
 ```text
 acpi/         BAT1 battery DSDT override for boot-without-charger detection
+camera/       OV02C10/IPU6 webcam notes, upstream install, and color tuning
 fingerprint/  Egis/LighTuning 1c7a:05a1 fingerprint fix using libfprint SDCP
 ```
 
@@ -24,6 +25,12 @@ fingerprint/  Egis/LighTuning 1c7a:05a1 fingerprint fix using libfprint SDCP
 The ACPI BAT1 override was tested successfully: Linux loads the DSDT table from initrd, reports `ACPI: Table Upgrade`, and creates `/sys/class/power_supply/BAT1` when booting without the charger.
 
 The fingerprint fix was tested successfully: `fprintd` resolves `/usr/local/lib/.../libfprint-2.so.2`, enrollment persists after `fprintd` restart, and two consecutive `fprintd-verify` calls return `verify-match`.
+
+The camera fix was tested successfully using [@Andycodeman](https://github.com/Andycodeman)'s
+[samsung-galaxy-book-linux-fixes](https://github.com/Andycodeman/samsung-galaxy-book-linux-fixes)
+repository: libcamera detects the internal OV02C10 camera, `camera-relay`
+exposes it as a standard V4L2 device, and the preferred color tuning on this
+machine is the `No CCM (raw baseline)` preset.
 
 ## Safety
 
@@ -44,5 +51,6 @@ Start with the subsystem README:
 
 ```text
 acpi/README.md
+camera/README.md
 fingerprint/README.md
 ```
