@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+shopt -s nullglob
+
+SYS_POWER_SUPPLY="/sys/class/power_supply"
+PLATFORM_PROFILE="/sys/firmware/acpi/platform_profile"
+PLATFORM_PROFILE_CHOICES="/sys/firmware/acpi/platform_profile_choices"
+
+section() {
+    printf '\n== %s ==\n' "$1"
+}
+
+print_kv() {
+    printf '  %-36s %s\n' "$1:" "$2"
+}
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+read_one_line() {
+    local path=$1
+
+    if [[ -r "$path" ]]; then
+        head -n 1 "$path" 2>/dev/null || true
+    fi
+
+    return 0
+}
+
+dmi_value() {
+    local dmidecode_key=$1
+    local sysfs_path=$2
+    local value=""
+
+    value=$(read_one_line "$sysfs_path")
+    if [[ -n "$value" ]]; then
+        printf '%s\n' "$value"
+        return 0
+    fi
+
+    if command_exists dmidecode; then
+        value=$(dmidecode -s "$dmidecode_key" 2>/dev/null || true)
+        if [[ -n "$value" ]]; then
+            printf '%s\n' "$value"
+            return 0
+        fi
+    fi
+
+    printf 'unavailable\n'
+}
+
+file_status() {
+    local path=$1
+
+    if [[ -e "$path" ]]; then
+        printf 'present'
+        if [[ -r "$path" ]]; then
+            local value
+            value=$(read_one_line "$path")
+            if [[ -n "$value" ]]; then
+                printf ' (%s)' "$value"
+            fi
+        fi
+        printf '\n'
+    else
+        printf 'absent\n'
+    fi
+}
+
+print_dmi() {
+    section "DMI"
+    print_kv "system-manufacturer" "$(dmi_value system-manufacturer /sys/class/dmi/id/sys_vendor)"
+    print_kv "system-product-name" "$(dmi_value system-product-name /sys/class/dmi/id/product_name)"
+    print_kv "bios-version" "$(dmi_value bios-version /sys/class/dmi/id/bios_version)"
+}
+
+print_batteries() {
+    section "Batteries"
+
+    local found_battery=0
+    local threshold_found=0
+    local supply
+
+    for supply in "$SYS_POWER_SUPPLY"/*; do
+        [[ -d "$supply" ]] || continue
+
+        local type
+        type=$(read_one_line "$supply/type")
+        [[ "$type" == "Battery" ]] || continue
+
+        found_battery=1
+        printf '  %s\n' "$(basename "$supply")"
+        print_kv "path" "$supply"
+
+        if [[ -r "$supply/status" ]]; then
+            print_kv "status" "$(read_one_line "$supply/status")"
+        fi
+
+        if [[ -e "$supply/charge_control_end_threshold" ]]; then
+            threshold_found=1
+            print_kv "charge_control_end_threshold" "present"
+            if [[ -r "$supply/charge_control_end_threshold" ]]; then
+                print_kv "current threshold" "$(read_one_line "$supply/charge_control_end_threshold")"
+            fi
+        else
+            print_kv "charge_control_end_threshold" "absent"
+        fi
+    done
+
+    if [[ "$found_battery" -eq 0 ]]; then
+        printf '  No battery devices found under %s.\n' "$SYS_POWER_SUPPLY"
+    fi
+
+    if [[ "$threshold_found" -eq 0 ]]; then
+        printf '  Battery charge threshold is not exposed by the kernel on this machine.\n'
+    fi
+}
+
+print_platform_profile() {
+    section "Platform profile"
+    print_kv "$PLATFORM_PROFILE" "$(file_status "$PLATFORM_PROFILE")"
+    print_kv "$PLATFORM_PROFILE_CHOICES" "$(file_status "$PLATFORM_PROFILE_CHOICES")"
+}
+
+print_modules() {
+    section "Loaded Samsung / WMI / ACPI modules"
+
+    if ! command_exists lsmod; then
+        printf '  lsmod is not available.\n'
+        return 0
+    fi
+
+    local modules
+    modules=$(lsmod 2>/dev/null | awk 'NR > 1 && tolower($1) ~ /(samsung|wmi|acpi)/ { print "  " $0 }' || true)
+
+    if [[ -n "$modules" ]]; then
+        printf '%s\n' "$modules"
+    else
+        printf '  No loaded modules matching samsung, wmi, or acpi were found.\n'
+    fi
+}
+
+main() {
+    printf 'Samsung Settings Linux capability detection\n'
+    printf 'Read-only diagnostic. No system settings are changed.\n'
+
+    print_dmi
+    print_batteries
+    print_platform_profile
+    print_modules
+}
+
+main "$@"

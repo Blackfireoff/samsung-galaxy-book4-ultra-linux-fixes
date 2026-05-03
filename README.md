@@ -15,9 +15,10 @@ Kernel: 7.0.0-15-generic
 This repository is intentionally split by subsystem:
 
 ```text
-acpi/         BAT1 battery DSDT override for boot-without-charger detection
-camera/       OV02C10/IPU6 webcam notes, upstream install, and color tuning
-fingerprint/  Egis/LighTuning 1c7a:05a1 fingerprint fix using libfprint SDCP
+acpi/              BAT1 battery DSDT override for boot-without-charger detection
+camera/            OV02C10/IPU6 webcam notes, upstream install, and color tuning
+fingerprint/       Egis/LighTuning 1c7a:05a1 fingerprint fix using libfprint SDCP
+samsung-settings/  Safe Linux controls for Samsung Settings-like features when exposed by the kernel
 ```
 
 See `HARDWARE_STATUS.md` for the tested hardware matrix, known limitations,
@@ -57,4 +58,5 @@ HARDWARE_STATUS.md
 acpi/README.md
 camera/README.md
 fingerprint/README.md
+samsung-settings/README.md
 ```

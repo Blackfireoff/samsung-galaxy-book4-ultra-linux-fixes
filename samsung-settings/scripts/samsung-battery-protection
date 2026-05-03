@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SYS_POWER_SUPPLY="/sys/class/power_supply"
+DEFAULT_ON_THRESHOLD=80
+DEFAULT_OFF_THRESHOLD=100
+MIN_THRESHOLD=50
+MAX_THRESHOLD=100
+
+usage() {
+    cat <<'EOF'
+Usage:
+  samsung-battery-protection status
+  samsung-battery-protection on
+  samsung-battery-protection off
+  samsung-battery-protection set <50-100>
+EOF
+}
+
+die() {
+    printf 'Error: %s\n' "$*" >&2
+    exit 1
+}
+
+find_threshold_file() {
+    local battery
+
+    for battery in "$SYS_POWER_SUPPLY"/BAT*; do
+        [[ -d "$battery" ]] || continue
+        [[ -e "$battery/charge_control_end_threshold" ]] || continue
+        printf '%s\n' "$battery/charge_control_end_threshold"
+        return 0
+    done
+
+    return 1
+}
+
+threshold_file_or_exit() {
+    local threshold_file
+
+    if ! threshold_file=$(find_threshold_file); then
+        printf 'Battery charge threshold is not exposed by the kernel on this machine.\n' >&2
+        exit 1
+    fi
+
+    printf '%s\n' "$threshold_file"
+}
+
+current_threshold() {
+    local threshold_file=$1
+
+    [[ -r "$threshold_file" ]] || die "Cannot read $threshold_file"
+    tr -d '[:space:]' < "$threshold_file"
+}
+
+validate_threshold() {
+    local threshold=$1
+
+    [[ "$threshold" =~ ^[0-9]+$ ]] || die "Threshold must be an integer between $MIN_THRESHOLD and $MAX_THRESHOLD."
+    (( threshold >= MIN_THRESHOLD && threshold <= MAX_THRESHOLD )) || die "Threshold must be between $MIN_THRESHOLD and $MAX_THRESHOLD."
+}
+
+write_threshold() {
+    local threshold_file=$1
+    local threshold=$2
+
+    validate_threshold "$threshold"
+
+    if [[ -w "$threshold_file" ]]; then
+        printf '%s\n' "$threshold" > "$threshold_file"
+    else
+        command -v sudo >/dev/null 2>&1 || die "sudo is required to write $threshold_file."
+        sudo sh -c 'printf "%s\n" "$1" > "$2"' sh "$threshold" "$threshold_file"
+    fi
+
+    local actual
+    actual=$(current_threshold "$threshold_file")
+
+    if [[ "$actual" != "$threshold" ]]; then
+        die "Write verification failed for $threshold_file: expected $threshold, got $actual."
+    fi
+
+    printf 'Battery charge threshold set to %s via %s.\n' "$actual" "$threshold_file"
+}
+
+show_status() {
+    local threshold_file=$1
+    local actual
+
+    actual=$(current_threshold "$threshold_file")
+    printf 'Battery charge threshold: %s (%s)\n' "$actual" "$threshold_file"
+}
+
+main() {
+    local command=${1:-}
+    local threshold_file
+
+    case "$command" in
+        status)
+            threshold_file=$(threshold_file_or_exit)
+            show_status "$threshold_file"
+            ;;
+        on)
+            threshold_file=$(threshold_file_or_exit)
+            write_threshold "$threshold_file" "$DEFAULT_ON_THRESHOLD"
+            ;;
+        off)
+            threshold_file=$(threshold_file_or_exit)
+            write_threshold "$threshold_file" "$DEFAULT_OFF_THRESHOLD"
+            ;;
+        set)
+            [[ $# -eq 2 ]] || {
+                usage >&2
+                exit 2
+            }
+            threshold_file=$(threshold_file_or_exit)
+            write_threshold "$threshold_file" "$2"
+            ;;
+        -h|--help|help|'')
+            usage
+            ;;
+        *)
+            usage >&2
+            exit 2
+            ;;
+    esac
+}
+
+main "$@"

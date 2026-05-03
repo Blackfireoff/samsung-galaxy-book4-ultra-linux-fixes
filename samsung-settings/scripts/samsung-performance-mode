@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PLATFORM_PROFILE="/sys/firmware/acpi/platform_profile"
+PLATFORM_PROFILE_CHOICES="/sys/firmware/acpi/platform_profile_choices"
+
+usage() {
+    cat <<'EOF'
+Usage:
+  samsung-performance-mode status
+  samsung-performance-mode list
+  samsung-performance-mode set <mode>
+EOF
+}
+
+die() {
+    printf 'Error: %s\n' "$*" >&2
+    exit 1
+}
+
+require_platform_profile() {
+    if [[ ! -e "$PLATFORM_PROFILE" || ! -e "$PLATFORM_PROFILE_CHOICES" ]]; then
+        printf 'Performance modes are not exposed by the kernel on this machine.\n' >&2
+        exit 1
+    fi
+
+    [[ -r "$PLATFORM_PROFILE" ]] || die "Cannot read $PLATFORM_PROFILE."
+    [[ -r "$PLATFORM_PROFILE_CHOICES" ]] || die "Cannot read $PLATFORM_PROFILE_CHOICES."
+}
+
+choices() {
+    tr '[:space:]' '\n' < "$PLATFORM_PROFILE_CHOICES" | sed '/^$/d'
+}
+
+mode_is_available() {
+    local requested=$1
+    local mode
+
+    while IFS= read -r mode; do
+        [[ "$mode" == "$requested" ]] && return 0
+    done < <(choices)
+
+    return 1
+}
+
+current_mode() {
+    tr -d '[:space:]' < "$PLATFORM_PROFILE"
+}
+
+show_status() {
+    printf 'Current performance mode: %s (%s)\n' "$(current_mode)" "$PLATFORM_PROFILE"
+}
+
+list_modes() {
+    printf 'Available performance modes from %s:\n' "$PLATFORM_PROFILE_CHOICES"
+    choices | sed 's/^/  /'
+}
+
+set_mode() {
+    local requested=$1
+
+    if ! mode_is_available "$requested"; then
+        printf 'Requested mode is not listed by the kernel: %s\n' "$requested" >&2
+        list_modes >&2
+        exit 1
+    fi
+
+    if [[ -w "$PLATFORM_PROFILE" ]]; then
+        printf '%s\n' "$requested" > "$PLATFORM_PROFILE"
+    else
+        command -v sudo >/dev/null 2>&1 || die "sudo is required to write $PLATFORM_PROFILE."
+        sudo sh -c 'printf "%s\n" "$1" > "$2"' sh "$requested" "$PLATFORM_PROFILE"
+    fi
+
+    local actual
+    actual=$(current_mode)
+
+    if [[ "$actual" != "$requested" ]]; then
+        die "Write verification failed for $PLATFORM_PROFILE: expected $requested, got $actual."
+    fi
+
+    printf 'Performance mode set to %s via %s.\n' "$actual" "$PLATFORM_PROFILE"
+}
+
+main() {
+    local command=${1:-}
+
+    case "$command" in
+        status)
+            require_platform_profile
+            show_status
+            ;;
+        list)
+            require_platform_profile
+            list_modes
+            ;;
+        set)
+            [[ $# -eq 2 ]] || {
+                usage >&2
+                exit 2
+            }
+            require_platform_profile
+            set_mode "$2"
+            ;;
+        -h|--help|help|'')
+            usage
+            ;;
+        *)
+            usage >&2
+            exit 2
+            ;;
+    esac
+}
+
+main "$@"

@@ -1,0 +1,9 @@
+[Unit]
+Description=Apply Samsung battery charge protection limit
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/samsung-battery-protection on
+
+[Install]
+WantedBy=multi-user.target
