@@ -8,9 +8,10 @@ PATCHED_AML="${DSDT_AML:-${WORK_DIR}/dsdt-patched.aml}"
 TABLE_DIR="/etc/acpi/samsung-bat1-dsdt"
 TABLE_FILE="${TABLE_DIR}/DSDT.aml"
 DRACUT_CONF="/etc/dracut.conf.d/99-samsung-bat1-dsdt.conf"
-INITRAMFS_HOOK="/etc/initramfs-tools/hooks/samsung-bat1-dsdt"
 INITRD="/boot/initrd.img-${KVER}"
 BACKUP_INITRD="/boot/initrd.img-${KVER}.pre-dsdt-bat1-permanent-backup"
+EARLY_DIR="/var/tmp/samsung-bat1-dsdt-early-initramfs"
+EARLY_CPIO="/var/tmp/samsung-bat1-dsdt-early.cpio"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "Run with sudo: sudo $0 ${KVER}" >&2
@@ -85,50 +86,44 @@ EOF
         echo "ACPI table installed: $TABLE_FILE"
         echo "Regenerating initrd for kernel ${KVER} with dracut"
 
-        dracut --force "/boot/initrd.img-${KVER}" "$KVER"
+        dracut --force "$INITRD" "$KVER"
         ;;
 
     initramfs-tools)
-        install -d -m 0755 /etc/initramfs-tools/hooks
+        if ! command -v cpio >/dev/null 2>&1; then
+            echo "Missing required command: cpio" >&2
+            echo "Install it with: sudo apt install cpio" >&2
+            exit 1
+        fi
 
-        cat > "$INITRAMFS_HOOK" <<EOF
-#!/bin/sh
-set -e
-
-PREREQ=""
-
-prereqs() {
-    echo "\$PREREQ"
-}
-
-case "\$1" in
-    prereqs)
-        prereqs
-        exit 0
-        ;;
-esac
-
-. /usr/share/initramfs-tools/hook-functions
-
-# Samsung Galaxy Book 960XGL BAT1 DSDT override.
-# Created from ${PATCHED_AML}
-#
-# The Linux kernel expects ACPI override tables in the early initramfs at:
-# /kernel/firmware/acpi/DSDT.aml
-
-mkdir -p "\${DESTDIR}/kernel/firmware/acpi"
-cp -p "${TABLE_FILE}" "\${DESTDIR}/kernel/firmware/acpi/DSDT.aml"
-
-exit 0
-EOF
-
-        chmod 0755 "$INITRAMFS_HOOK"
-
-        echo "initramfs-tools hook installed: $INITRAMFS_HOOK"
         echo "ACPI table installed: $TABLE_FILE"
-        echo "Regenerating initrd for kernel ${KVER} with initramfs-tools"
+        echo "Regenerating normal initrd for kernel ${KVER} with initramfs-tools"
 
         update-initramfs -u -k "$KVER"
+
+        echo "Creating early initramfs ACPI override"
+
+        rm -rf "$EARLY_DIR"
+        mkdir -p "$EARLY_DIR/kernel/firmware/acpi"
+
+        cp -p "$TABLE_FILE" "$EARLY_DIR/kernel/firmware/acpi/DSDT.aml"
+
+        (
+            cd "$EARLY_DIR"
+            find kernel | cpio --quiet -H newc -o > "$EARLY_CPIO"
+        )
+
+        echo "Prepending early ACPI override cpio to initrd"
+
+        cp -a "$INITRD" "${INITRD}.without-acpi-early"
+
+        cat "$EARLY_CPIO" "${INITRD}.without-acpi-early" > "${INITRD}.new"
+        chmod 0644 "${INITRD}.new"
+        mv "${INITRD}.new" "$INITRD"
+
+        rm -rf "$EARLY_DIR" "$EARLY_CPIO"
+
+        echo "Early ACPI override prepended to: $INITRD"
         ;;
 
     *)
