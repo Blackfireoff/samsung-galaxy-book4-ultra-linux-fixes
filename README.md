@@ -60,3 +60,12 @@ camera/README.md
 fingerprint/README.md
 samsung-settings/README.md
 ```
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+## Disclaimer
+
+This project modifies low-level Linux/ACPI behavior and may affect system boot or hardware behavior.
+Use it at your own risk. Make sure you understand what each script does before running it.
